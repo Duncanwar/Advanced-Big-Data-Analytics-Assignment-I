@@ -1,5 +1,58 @@
 # CLAUDE.md
 
+AUCA Advanced Big Data Analytics, Assignment I: ingest, clean and analyse readings from
+4,000 simulated smart meters (MQTT → TimescaleDB). All times are CAT (Africa/Kigali, UTC+2).
+
+## Working agreement
+
+- The student writes all processing and database code. Claude explains, gives snippets in chat
+  and checks results (read-only queries), but does **not** create or edit project code files.
+- `smart_meter_simulator.py` is supplied and must stay **unchanged**.
+- Every required screenshot is full screen: command, result, Dock and menu-bar clock visible.
+
+## Setup
+
+- `docker compose up -d` starts `tsdb` (timescale/timescaledb:latest-pg16) and `emqx` (MQTT on 1883,
+  dashboard on <http://localhost:18083>, `admin` / `public`).
+- Python scripts run locally in `.venv` (`psycopg[binary]`, `paho-mqtt` 2.1.0, which needs
+  `CallbackAPIVersion.VERSION2`).
+- Database: `host=localhost port=5432 dbname=tsdb user=postgres password=postgres`.
+  The database time zone is set with `ALTER DATABASE tsdb SET timezone = 'Africa/Kigali'`.
+- psql: `docker exec -it tsdb psql -U postgres -d tsdb` (SQL ends with `;`, backslash commands don't).
+
+## Files
+
+| File | Purpose |
+|---|---|
+| `schema.sql` | `energy_live` (regular table), `energy_readings` (hypertable, 1-day chunks on `event_time`), `meters`. Run: `docker exec -i tsdb psql -U postgres -d tsdb < schema.sql` |
+| `load_meters.py` | Loads `meter_metadata()` into `meters` (4,000 rows) |
+| `publisher.py` | 1.3 pilot: first 2,000 readings → `energy/meters/{meter_id}`, QoS 1, no retain; counts PUBACKs; logs to `publisher.log` |
+| `subscriber.py` | 1.3 pilot: subscribes `energy/meters/#` QoS 1, inserts into `energy_live`; logs to `subscriber.log` |
+| `load_history.py` | 2.1 (planned): full stream → `energy_readings.csv` in 100k batches → `COPY` into `energy_readings` |
+
+## Progress
+
+- [x] 1.1 Environment (see the recorded values below)
+- [x] 1.2 Tables, `meters` = 4,000 rows (2,584 residential, 1,010 commercial, 406 industrial), data dictionary written
+- [x] 1.3 Pilot stream: `energy_live` = 2,000 rows (keep it there)
+- [ ] 2.1 Full load: route = CSV + `COPY`; every count should be 10,696,848. Add `*.csv` and `*.log` to `.gitignore` first.
+      Checks: distinct meters = 4000, event_time 2026-09-01 00:00 to 2026-09-28 23:45,
+      sizes from `hypertable_detailed_size('energy_readings')`. If it fails partway: `TRUNCATE energy_readings;`
+- [ ] 2.2 Data quality (missing pairs, extra copies, delayed readings, percentages, top 5 meters by missing readings)
+
+## Expected counts (`dataset_info()`)
+
+| Count | Value |
+|---|---|
+| planned_readings | 10,752,000 (4,000 meters × 28 days × 96 slots) |
+| emitted_readings | 10,696,848 |
+| unique_readings | 10,643,735 |
+| duplicate_readings (extra copies) | 53,113 |
+| delayed_unique_readings | 213,090 |
+| missing_readings | 108,265 |
+
+Normal arrival = `event_time` + 15 min. Delayed arrivals = 30–180 min after `event_time`.
+
 ## Recording the test environment
 
 Run with both containers (`tsdb`, `emqx`) up. Prints CPU, RAM, OS, storage, Python, EMQX,
