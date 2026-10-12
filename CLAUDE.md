@@ -35,10 +35,13 @@ AUCA Advanced Big Data Analytics, Assignment I: ingest, clean and analyse readin
 - [x] 1.1 Environment (see the recorded values below)
 - [x] 1.2 Tables, `meters` = 4,000 rows (2,584 residential, 1,010 commercial, 406 industrial), data dictionary written
 - [x] 1.3 Pilot stream: `energy_live` = 2,000 rows (keep it there)
-- [ ] 2.1 Full load: route = CSV + `COPY`; every count should be 10,696,848. Add `*.csv` and `*.log` to `.gitignore` first.
-      Checks: distinct meters = 4000, event_time 2026-09-01 00:00 to 2026-09-28 23:45,
-      sizes from `hypertable_detailed_size('energy_readings')`. If it fails partway: `TRUNCATE energy_readings;`
-- [ ] 2.2 Data quality (missing pairs, extra copies, delayed readings, percentages, top 5 meters by missing readings)
+- [x] 2.1 Full load (CSV + `COPY`, `load_history.py`): `energy_readings` = 10,696,848 rows, 4,000 meters,
+      event_time 2026-09-01 00:00 to 2026-09-28 23:45 CAT, 958 MB data + 85 MB indexes = 1,043 MB, 29 chunks
+      (chunks are aligned to UTC midnight, so CAT 00:00–02:00 on 1 Sep falls in an extra 31 Aug chunk).
+- [x] 2.2 Data quality, all match the reference: unique 10,643,735, extra copies 53,113, delayed 213,090,
+      missing 108,265. Use `grid EXCEPT SELECT meter_id, event_time FROM energy_readings` for missing pairs
+      (about 1 min); a `NOT EXISTS` version ran for over 20 min. Top missing: 1000003622 (47), 1000000106 (45),
+      1000000366 (45), 1000001259 (44), then a three-way tie at 43 (1000000189, 1000000295, 1000000296).
 
 ## Expected counts (`dataset_info()`)
 
